@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Groundwater Quality Dashboard & HPI Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- LeafletJS for maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Leaflet Heatmap Plugin -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #map {
+            height: 60vh;
+            min-height: 500px;
+            border-radius: 0.5rem;
+        }
+        .leaflet-container {
+            background: #f9fafb;
+        }
+        .form-input {
+             width: 100%;
+             padding: 0.5rem;
+             border-radius: 0.375rem;
+             border: 1px solid #D1D5DB; /* border-gray-300 */
+             transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: #4F46E5; /* focus:border-indigo-500 */
+            box-shadow: 0 0 0 1px #4F46E5;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">Groundwater Quality Dashboard & HPI Calculator</h1>
+            <p class="text-lg text-gray-600 mt-2">Analyze Heavy Metal Pollution Index (HPI) across various locations.</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            
+            <!-- Left Column: Map -->
+            <div class="lg:col-span-3">
+                <div class="bg-white p-6 rounded-lg shadow-md h-full">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Pollution Heatmap</h2>
+                    <div id="map" class="border border-gray-200"></div>
+                    <p class="text-sm text-gray-500 mt-2 text-center">Heatmap visualizes HPI intensity. Brighter areas indicate higher pollution.</p>
+                </div>
+            </div>
+
+            <!-- Right Column: Controls and Calculator -->
+            <div class="lg:col-span-2 space-y-8">
+                <!-- Data Explorer Section -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Explore Existing Data</h2>
+                    <label for="location-select" class="block text-sm font-medium text-gray-700">Select a Location:</label>
+                    <select id="location-select" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm">
+                        <option value="">-- Loading Locations --</option>
+                    </select>
+                    <div id="results-dashboard" class="mt-6 hidden">
+                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <h3 class="text-sm font-medium text-gray-500">HPI Score</h3>
+                                <p id="hpi-score" class="mt-1 text-3xl font-semibold text-gray-900"></p>
+                            </div>
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <h3 class="text-sm font-medium text-gray-500">Water Quality</h3>
+                                <p id="water-quality" class="mt-1 text-3xl font-semibold text-gray-900"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="details-section" class="mt-6 hidden">
+                        <!-- Calculation Breakdown Table -->
+                    </div>
+                    <div id="explorer-loader" class="text-center py-10 hidden"><p>Loading...</p></div>
+                    <div id="explorer-error" class="text-center py-10 text-red-600 hidden"></div>
+                </div>
+                
+                <!-- Add New Data Section -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Add New Data Point</h2>
+                    <form id="add-data-form" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="sm:col-span-3">
+                                <label for="location-input" class="block text-sm font-medium">Location Name</label>
+                                <input type="text" id="location-input" class="form-input mt-1" required>
+                            </div>
+                            <div>
+                                <label for="lat-input" class="block text-sm font-medium">Latitude</label>
+                                <input type="number" step="any" id="lat-input" class="form-input mt-1" required>
+                            </div>
+                            <div>
+                                <label for="lon-input" class="block text-sm font-medium">Longitude</label>
+                                <input type="number" step="any" id="lon-input" class="form-input mt-1" required>
+                            </div>
+                        </div>
+                        <p class="text-sm font-medium text-gray-700 pt-2">Enter Heavy Metal Concentrations (µg/L):</p>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            <div><label for="As-input" class="block text-xs">Arsenic (As)</label><input type="number" step="any" id="As-input" placeholder="e.g., 15" class="form-input mt-1"></div>
+                            <div><label for="Fe-input" class="block text-xs">Iron (Fe)</label><input type="number" step="any" id="Fe-input" placeholder="e.g., 250" class="form-input mt-1"></div>
+                            <div><label for="U-input" class="block text-xs">Uranium (U)</label><input type="number" step="any" id="U-input" placeholder="e.g., 40" class="form-input mt-1"></div>
+                            <div><label for="Pb-input" class="block text-xs">Lead (Pb)</label><input type="number" step="any" id="Pb-input" placeholder="e.g., 8" class="form-input mt-1"></div>
+                            <div><label for="Cd-input" class="block text-xs">Cadmium (Cd)</label><input type="number" step="any" id="Cd-input" placeholder="e.g., 2.5" class="form-input mt-1"></div>
+                            <div><label for="Ni-input" class="block text-xs">Nickel (Ni)</label><input type="number" step="any" id="Ni-input" placeholder="e.g., 20" class="form-input mt-1"></div>
+                            <div><label for="Cr-input" class="block text-xs">Chromium (Cr)</label><input type="number" step="any" id="Cr-input" placeholder="e.g., 15" class="form-input mt-1"></div>
+                        </div>
+                        <div class="mt-6 text-center">
+                            <button type="submit" id="add-data-btn" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors w-full">
+                                Add Data Point to Map
+                            </button>
+                        </div>
+                        <p id="form-message" class="text-center mt-3 text-sm"></p>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- Configuration & Constants ---
+        const API_BASE_URL = 'https://amrit-zbnn.onrender.com/api'; // Update with your backend URL
+        const HEAVY_METALS = ['As', 'Fe', 'U', 'Pb', 'Cd', 'Ni', 'Cr'];
+
+        // --- DOM Elements ---
+        const locationSelect = document.getElementById('location-select');
+        const resultsDashboard = document.getElementById('results-dashboard');
+        const hpiScoreEl = document.getElementById('hpi-score');
+        const waterQualityEl = document.getElementById('water-quality');
+        const detailsSection = document.getElementById('details-section');
+        const explorerError = document.getElementById('explorer-error');
+        const addDataForm = document.getElementById('add-data-form');
+        const addDataBtn = document.getElementById('add-data-btn');
+        const formMessage = document.getElementById('form-message');
+        
+        let map;
+        let heatLayer;
+        let locationMarker = null; // To keep track of the active marker
+        let allDataCache = []; 
+
+        // --- Event Listeners & Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeMap();
+            loadInitialData();
+        });
+
+        locationSelect.addEventListener('change', (event) => {
+            const location = event.target.value;
+            
+            // Remove previous marker if it exists
+            if (locationMarker) {
+                locationMarker.remove();
+                locationMarker = null;
+            }
+
+            if (location) {
+                displayResultsForLocation(location);
+
+                // Find coordinates for the selected location to focus map
+                const locationData = allDataCache.find(item => item.Location === location);
+                if (locationData && locationData.Latitude && locationData.Longitude) {
+                    const lat = parseFloat(locationData.Latitude);
+                    const lon = parseFloat(locationData.Longitude);
+
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        // Pan map to the location and add a marker
+                        map.setView([lat, lon], 13); // Zoom level 13 for a closer view
+                        locationMarker = L.marker([lat, lon]).addTo(map)
+                            .bindPopup(`<b>${location}</b>`)
+                            .openPopup();
+                    }
+                }
+            } else {
+                hideResults();
+                // Reset map view when no location is selected
+                map.setView([22.5, 82.0], 5);
+            }
+        });
+
+        addDataForm.addEventListener('submit', handleAddData);
+
+        // --- Map Functions ---
+        function initializeMap() {
+            map = L.map('map').setView([22.5, 82.0], 5);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+        }
+
+        function updateHeatmap() {
+            const heatData = allDataCache.map(item => {
+                const hpi = parseFloat(item.hpi);
+                if (isNaN(hpi)) return null;
+                const intensity = Math.min(hpi / 200, 1.0); 
+                return [parseFloat(item.Latitude), parseFloat(item.Longitude), intensity];
+            }).filter(p => p && !isNaN(p[0]) && !isNaN(p[1]));
+
+            if (heatLayer) {
+                heatLayer.setLatLngs(heatData);
+            } else if (heatData.length > 0) {
+                heatLayer = L.heatLayer(heatData, { radius: 25, blur: 15, maxZoom: 10 }).addTo(map);
+            }
+        }
+
+        // --- Data Fetching & Handling ---
+        async function loadInitialData() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/all-data`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                allDataCache = await response.json();
+                
+                populateLocationsDropdown();
+                updateHeatmap();
+
+            } catch (error) {
+                console.error('Failed to load initial data:', error);
+                locationSelect.innerHTML = '<option value="">-- Failed to load --</option>';
+                showError('Could not load initial data from the server. Please ensure the backend is running.', 'explorer-error');
+            }
+        }
+        
+        // --- Add New Data Logic ---
+        async function handleAddData(event) {
+            event.preventDefault();
+            const originalBtnText = addDataBtn.innerHTML;
+            addDataBtn.innerHTML = 'Submitting...';
+            addDataBtn.disabled = true;
+            formMessage.textContent = '';
+            formMessage.className = 'text-center mt-3 text-sm';
+
+            const payload = {
+                Location: document.getElementById('location-input').value,
+                Latitude: document.getElementById('lat-input').value,
+                Longitude: document.getElementById('lon-input').value,
+            };
+            
+            let hasMetalInput = false;
+            HEAVY_METALS.forEach(metal => {
+                const val = document.getElementById(`${metal}-input`).value;
+                if(val) {
+                    payload[metal] = val;
+                    hasMetalInput = true;
+                }
+            });
+
+            if (!hasMetalInput) {
+                showFormMessage('Please enter a value for at least one heavy metal.', 'error');
+                addDataBtn.innerHTML = originalBtnText;
+                addDataBtn.disabled = false;
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/add-data`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.message || 'Failed to submit data.');
+                }
+
+                const newDataPoint = await response.json();
+                
+                // Update UI in real-time
+                allDataCache.push(newDataPoint);
+                populateLocationsDropdown();
+                updateHeatmap();
+                
+                showFormMessage('Successfully added new data point!', 'success');
+                addDataForm.reset();
+
+            } catch (error) {
+                console.error('Failed to add data:', error);
+                showFormMessage(error.message, 'error');
+            } finally {
+                addDataBtn.innerHTML = originalBtnText;
+                addDataBtn.disabled = false;
+            }
+        }
+        
+        // --- UI Update & Utility Functions ---
+        function populateLocationsDropdown() {
+            const uniqueLocations = [...new Set(allDataCache.map(item => item.Location))].sort();
+            const currentSelection = locationSelect.value;
+            
+            locationSelect.innerHTML = '<option value="">-- Select a Location --</option>';
+            uniqueLocations.forEach(location => {
+                const option = document.createElement('option');
+                option.value = location;
+                option.textContent = location;
+                locationSelect.appendChild(option);
+            });
+
+            // Restore previous selection if it still exists
+            if (uniqueLocations.includes(currentSelection)) {
+                locationSelect.value = currentSelection;
+            }
+        }
+
+        function displayResultsForLocation(location) {
+             const locationData = allDataCache
+                .filter(row => row.Location === location)
+                .sort((a, b) => parseInt(b.Year) - parseInt(a.Year));
+
+            if(locationData.length === 0) return;
+            
+            const latestSample = locationData[0];
+            hpiScoreEl.textContent = parseFloat(latestSample.hpi).toFixed(2);
+            waterQualityEl.textContent = latestSample.quality;
+            updateQualityColor(waterQualityEl, latestSample.quality);
+            
+            resultsDashboard.classList.remove('hidden');
+            explorerError.classList.add('hidden');
+        }
+        
+        function updateQualityColor(element, quality) {
+            let colorClass = 'text-gray-900';
+            if (quality === "Excellent") colorClass = 'text-blue-600';
+            else if (quality === "Good") colorClass = 'text-green-600';
+            else if (quality && (quality.includes("Polluted") || quality.includes("Unsuitable"))) colorClass = 'text-red-600';
+            element.className = `mt-1 text-3xl font-semibold ${colorClass}`;
+        }
+        
+        function showFormMessage(message, type) {
+            formMessage.textContent = message;
+            formMessage.className = `text-center mt-3 text-sm ${type === 'success' ? 'text-green-600' : 'text-red-600'}`;
+            setTimeout(() => { formMessage.textContent = ''; }, 5000);
+        }
+
+        function hideResults() {
+            resultsDashboard.classList.add('hidden');
+            detailsSection.classList.add('hidden');
+        }
+
+        function showError(message, elementId) {
+            hideResults();
+            const errorEl = document.getElementById(elementId);
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
+
